@@ -1,0 +1,1 @@
+﻿{"message":"500 INTERNAL_SERVER_ERROR \"Failed to start recording: org.springframework.web.server.ResponseStatusException - 500 INTERNAL_SERVER_ERROR \"LiveKit API Error: Code 503, Body: {\"code\":\"unavailable\",\"msg\":\"twirp error unknown: no response from servers\"}\"\"","error":"org.springframework.web.server.ResponseStatusException"}

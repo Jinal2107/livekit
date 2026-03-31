@@ -1,0 +1,1 @@
+﻿{"message":"500 INTERNAL_SERVER_ERROR \"Failed to start recording: org.springframework.web.server.ResponseStatusException - 500 INTERNAL_SERVER_ERROR \"Failed to start recording: No response from LiveKit\"\"","error":"org.springframework.web.server.ResponseStatusException"}

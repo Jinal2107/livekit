@@ -1,0 +1,211 @@
+<!-- Join Screen -->
+<div *ngIf="!token" class="join-container">
+  <div class="card join-card">
+    <div class="join-tabs">
+      <button class="join-tab" [class.active]="joinMode === 'join'" (click)="setJoinMode('join')">Join</button>
+      <button class="join-tab" [class.active]="joinMode === 'create'" (click)="setJoinMode('create')">Create</button>
+    </div>
+
+    <!-- Join Mode -->
+    <div *ngIf="joinMode === 'join'" class="form-content">
+      <h1>Join Meeting</h1>
+      <div class="rooms-list" *ngIf="activeRooms.length > 0">
+        <p class="section-label">Active Rooms</p>
+        <div class="room-item" *ngFor="let r of activeRooms" (click)="selectRoom(r)" [class.selected]="roomName === r.roomName">
+          <div class="room-info">
+            <span class="room-name-text">{{ r.roomName }}</span>
+            <span class="room-meta">{{ r.createdBy }} • {{ r.isPrivate ? 'Private' : 'Public' }}</span>
+          </div>
+          <i class="ph ph-caret-right"></i>
+        </div>
+      </div>
+
+      <input type="text" class="input" placeholder="Room Name" [(ngModel)]="roomName" (keyup)="checkRoomPrivacy()" />
+      <input type="text" class="input" placeholder="Your Name" [(ngModel)]="participantName" />
+      <input *ngIf="isPrivate" type="password" class="input" placeholder="Room Password (Required)" [(ngModel)]="password" />
+      
+      <button class="button" (click)="fetchToken()" [disabled]="!roomName || !participantName">
+        <i class="ph ph-video-camera"></i> Join Room
+      </button>
+    </div>
+
+    <!-- Create Mode -->
+    <div *ngIf="joinMode === 'create'" class="form-content">
+      <h1>Create New Room</h1>
+      <input type="text" class="input" placeholder="Room Name" [(ngModel)]="roomName" />
+      <input type="text" class="input" placeholder="Your Name" [(ngModel)]="participantName" />
+      
+      <div class="privacy-settings">
+        <label class="checkbox-label">
+          <input type="checkbox" [(ngModel)]="isPrivate" />
+          Make Private
+        </label>
+        <input *ngIf="isPrivate" type="password" class="input" placeholder="Set Password" [(ngModel)]="password" style="margin-top: 0.5rem;" />
+      </div>
+
+      <button class="button" (click)="fetchToken()" [disabled]="!roomName || !participantName">
+        <i class="ph ph-plus-circle"></i> Create & Join
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Main Room Layout -->
+<div *ngIf="token && connected" class="room-container" [class.sidebar-closed]="!showSidebar">
+  
+  <!-- Header -->
+  <header class="header">
+    <div class="header-info">
+      <h2><i class="ph ph-users"></i> {{ roomName }} 
+         <span class="participant-count">{{ getParticipantCount() }}</span>
+         <span *ngIf="isPrivate" class="private-badge" title="Private Room"><i class="ph-fill ph-lock"></i></span>
+      </h2>
+    </div>
+    <div style="display: flex; gap: 0.8rem; align-items: center;">
+      <span *ngIf="isRecording" class="recording-indicator">
+        <i class="ph-fill ph-circle"></i> REC
+      </span>
+      <button *ngIf="isModerator" class="header-action-btn danger" (click)="endRoom()" title="End session for all">
+        <i class="ph ph-phone-x"></i> End Session
+      </button>
+      <button class="toggle-sidebar-btn" (click)="showSidebar = !showSidebar">
+        <i class="ph ph-sidebar-simple"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Video Area -->
+  <main class="main-view">
+    <div class="screen-share-view" [class.active]="isScreenSharing">
+       <video #screenShareVideo autoplay playsinline></video>
+    </div>
+
+    <div class="video-grid" id="remote-videos">
+      <!-- Local Video -->
+      <div class="video-wrapper">
+        <div class="video-track" id="video-local">
+          <video #localVideo autoplay muted playsinline *ngIf="videoEnabled"></video>
+        </div>
+        <div *ngIf="!videoEnabled" class="avatar-initial">{{ participantName.charAt(0).toUpperCase() }}</div>
+        
+        <div class="participant-overlay">
+           <div class="participant-name">
+             {{ participantName }} (You) <span *ngIf="isModerator" class="mod-icon"> <i class="ph-fill ph-star"></i></span>
+           </div>
+           <div class="status-icons">
+             <div class="hand-raised" *ngIf="isHandRaised"><i class="ph-fill ph-hand-palm"></i></div>
+             <div class="mic-off" *ngIf="!audioEnabled"><i class="ph-fill ph-microphone-slash"></i></div>
+           </div>
+        </div>
+      </div>
+
+      <!-- Remote Videos -->
+      <div class="video-wrapper" 
+           *ngFor="let rp of remoteParticipants" 
+           [id]="'participant-' + rp.participant.identity"
+           [class.speaking]="rp.participant.isSpeaking">
+
+        <div class="video-track" [id]="'video-track-' + rp.participant.identity"></div>
+        <div *ngIf="!hasVideo(rp.participant)" class="avatar-initial">{{ rp.participant.identity.charAt(0).toUpperCase() }}</div>
+        
+        <div class="participant-overlay">
+           <div class="participant-name">{{ rp.participant.identity }}</div>
+           <div class="status-icons">
+             <div class="hand-raised" *ngIf="getHandRaised(rp.participant.identity)"><i class="ph-fill ph-hand-palm"></i></div>
+             <div class="mic-off" *ngIf="!hasAudio(rp.participant)"><i class="ph-fill ph-microphone-slash"></i></div>
+           </div>
+        </div>
+
+        <div class="mod-menu" *ngIf="isModerator">
+          <button class="mod-btn" (click)="kickUser(rp.participant.identity)" title="Remove user"><i class="ph-bold ph-x"></i></button>
+          <button class="mod-btn" (click)="muteUser(rp.participant.identity)" title="Mute user"><i class="ph-bold ph-microphone-slash"></i></button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="tabs">
+      <button class="tab" [class.active]="activeTab === 'chat'" (click)="openChat()">Chat</button>
+      <button class="tab" [class.active]="activeTab === 'people'" (click)="activeTab = 'people'">People</button>
+      <button class="tab" [class.active]="activeTab === 'recordings'" (click)="activeTab = 'recordings'; loadRecordings()">Media</button>
+    </div>
+    
+    <!-- Chat Tab -->
+    <div class="chat-panel" *ngIf="activeTab === 'chat'">
+      <div class="chat-messages" id="chat-messages">
+        <div *ngIf="messages.length === 0" class="chat-empty">
+          <i class="ph ph-chat-dots"></i>
+          <p>No messages yet.</p>
+        </div>
+        <div *ngFor="let msg of messages" class="chat-bubble-wrapper" [class.self]="msg.sender.includes('(You)')">
+          <div class="chat-sender">{{ msg.sender }}</div>
+          <div class="chat-bubble">{{ msg.text }}</div>
+        </div>
+      </div>
+      <div class="chat-input-area">
+        <textarea class="chat-input" rows="1" placeholder="Type a message..." [(ngModel)]="chatInput" (keydown)="onChatKeydown($event)"></textarea>
+        <button class="chat-send-btn" (click)="sendChatMessage()" [disabled]="!chatInput.trim()"><i class="ph-fill ph-paper-plane-tilt"></i></button>
+      </div>
+    </div>
+
+    <!-- People Tab -->
+    <div class="tab-content" *ngIf="activeTab === 'people'">
+       <div *ngIf="isModerator && waitingUsers.length > 0" class="waiting-room-section">
+          <h4>Waiting Room ({{waitingUsers.length}})</h4>
+          <div *ngFor="let u of waitingUsers" class="list-item">
+            <span>{{ u }}</span>
+            <button class="button tiny-btn" (click)="admitUser(u)">Admit</button>
+          </div>
+       </div>
+       <h4>In Room ({{ getParticipantCount() }})</h4>
+       <div class="list-item"><span>{{participantName}} (You)</span></div>
+       <div *ngFor="let rp of remoteParticipants" class="list-item"><span>{{ rp.participant.identity }}</span></div>
+    </div>
+
+    <!-- Recordings Tab -->
+    <div class="tab-content" *ngIf="activeTab === 'recordings'">
+      <h4>Recordings</h4>
+      <div *ngIf="recordings.length === 0" class="empty-state">No recordings found.</div>
+      <div *ngFor="let rec of recordings" class="recording-card">
+        <div class="rec-info">
+          <span class="rec-status" [class.active]="rec.status === 'ACTIVE'">{{ rec.status }}</span>
+          <span class="rec-date">{{ rec.createdAt | date:'short' }}</span>
+        </div>
+        <a *ngIf="rec.fileUrl" [href]="rec.fileUrl" target="_blank" class="rec-link">
+          <i class="ph ph-download-simple"></i> Download
+        </a>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Footer Control Bar -->
+  <footer class="footer">
+    <button class="control-btn" [class.danger]="!audioEnabled" (click)="toggleAudio()">
+      <i [class]="audioEnabled ? 'ph ph-microphone' : 'ph-fill ph-microphone-slash'"></i>
+      {{ audioEnabled ? 'Mute' : 'Unmute' }}
+    </button>
+    <button class="control-btn" [class.danger]="!videoEnabled" (click)="toggleVideo()">
+      <i [class]="videoEnabled ? 'ph ph-video-camera' : 'ph-fill ph-video-camera-slash'"></i>
+      {{ videoEnabled ? 'Stop' : 'Start' }}
+    </button>
+    <button class="control-btn" [class.active]="isScreenSharing" [class.primary]="isScreenSharing" (click)="toggleScreenShare()">
+      <i class="ph ph-screencast"></i> Share
+    </button>
+    <button class="control-btn" [class.active]="isHandRaised" [class.primary]="isHandRaised" (click)="toggleHand()">
+      <i class="ph ph-hand-palm"></i> Raise
+    </button>
+    <button class="control-btn" *ngIf="isModerator" [class.active]="isRecording" [class.danger]="isRecording" (click)="toggleRecord()">
+      <i class="ph ph-record"></i> Record
+    </button>
+    <button class="control-btn" (click)="openChat()">
+      <i class="ph ph-chat-dots"></i> Chat
+      <span *ngIf="unreadMessages > 0" class="badge-dot"></span>
+    </button>
+    <div style="width: 1rem;"></div>
+    <button class="control-btn leave" (click)="disconnect()">
+      <i class="ph ph-phone-disconnect"></i> Leave
+    </button>
+  </footer>
+</div>
